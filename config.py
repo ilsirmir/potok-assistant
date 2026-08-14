@@ -27,6 +27,14 @@ LLM_BASE_URL = os.getenv(
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.6-flash")
 LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY")
 
+# Локальные серверы моделей, такие как Ollama, LM Studio и vLLM, ключ не
+# проверяют, но клиентская библиотека без него не стартует. Подставляем
+# заглушку, чтобы локальный запуск не требовал выдумывать ключ.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal")
+LLM_IS_LOCAL = any(host in LLM_BASE_URL for host in LOCAL_HOSTS)
+if LLM_IS_LOCAL and not LLM_API_KEY:
+    LLM_API_KEY = "local"
+
 # --- Хранилище --------------------------------------------------------------
 # Демо-режим: реестр читается и пишется в локальный файл вместо Google
 # Таблицы. Нужен, чтобы проект можно было запустить, имея только ключ

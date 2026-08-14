@@ -47,10 +47,13 @@ def check_env():
     missing = [name for name in required if not getattr(config, name)]
     if missing:
         raise RuntimeError("в .env нет переменных: " + ", ".join(missing))
+    if config.LLM_IS_LOCAL:
+        note = f"локальный сервер модели {config.LLM_BASE_URL}, ключ не нужен"
+    else:
+        note = "LLM_API_KEY на месте"
     if config.DEMO_MODE:
-        return ("LLM_API_KEY на месте. Google не настроен — включён "
-                "демо-режим на локальном файле")
-    return "переменные на месте"
+        return f"{note}. Google не настроен, включён демо-режим на локальном файле"
+    return note
 
 
 def check_llm():
