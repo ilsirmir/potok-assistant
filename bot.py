@@ -23,9 +23,11 @@ API = "https://api.telegram.org/bot{token}/{method}"
 LIMIT = 4000  # Telegram режет сообщения длиннее 4096 символов
 SHEET_URL = "https://docs.google.com/spreadsheets/d/{id}/edit"
 
+# В меню только то, чем пользуются ежедневно. Похожие задачи нужны раз
+# в месяц при планировании — им место в командах, а не на главном экране.
 MENU = {"keyboard": [
     [{"text": "Что горит"}, {"text": "Проекты"}],
-    [{"text": "Подготовка к встрече"}, {"text": "Похожие задачи"}],
+    [{"text": "Подготовка к встрече"}],
 ], "resize_keyboard": True}
 
 COMMANDS = [
@@ -59,11 +61,24 @@ GREETING = (
     "Пользуйтесь кнопками внизу или пишите словами."
 )
 
+# Переписка разделена по проектам, как и в веб-версии: ключ — пара
+# (чат, проект). Общая история на три проекта заставляет модель смешивать
+# контексты, и ошибки получаются правдоподобными, а потому незаметными.
 histories = {}
 
 # Выбранный проект держится за чатом: человек указывает заказчика один раз,
 # дальше все заметки и файлы относятся к нему, пока проект не сменят.
 active = {}
+
+
+def history_of(chat_id):
+    return histories.setdefault((chat_id, active.get(chat_id, "")), [])
+
+
+def forget(chat_id):
+    """Забывает переписку по всем проектам этого чата."""
+    for key in [k for k in histories if k[0] == chat_id]:
+        histories.pop(key)
 
 
 # --- Telegram API ----------------------------------------------------------
@@ -89,7 +104,7 @@ def to_html(text):
     text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text, flags=re.DOTALL)
     text = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", text)
-    text = re.sub(r"^\s*[-*]\s+", "• ", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-*·]\s+", "• ", text, flags=re.MULTILINE)
     return text
 
 
@@ -134,8 +149,7 @@ def project_actions(project_id):
     """Что можно сделать с выбранным проектом."""
     return {"inline_keyboard": [
         [{"text": "Подготовить к встрече", "callback_data": f"prep:{project_id}"}],
-        [{"text": "Задачи", "callback_data": f"tasks:{project_id}"},
-         {"text": "Риски", "callback_data": f"risks:{project_id}"}],
+        [{"text": "Задачи", "callback_data": f"tasks:{project_id}"}],
         [{"text": "Внести заметки или файл", "callback_data": f"notes:{project_id}"}],
         [{"text": "Другой проект", "callback_data": "list:all"}],
     ]}
@@ -187,7 +201,7 @@ def ask(chat_id, text):
     call("sendChatAction", chat_id=chat_id, action="typing")
 
     actions = []
-    history = histories.setdefault(chat_id, [])
+    history = history_of(chat_id)
     history.append({"role": "user", "content": text})
 
     try:
@@ -202,7 +216,7 @@ def ask(chat_id, text):
         send(chat_id, f"Сбой: {type(e).__name__}: {e}", as_html=False)
         return
 
-    histories[chat_id] = result
+    histories[(chat_id, active.get(chat_id, ""))] = result
     reply = agent.last_reply(result)
     send(chat_id, to_html(reply), markup=after_reply_keyboard(reply, actions))
 
@@ -295,13 +309,13 @@ def handle_message(message):
         return
 
     if text in ("/start", "/help"):
-        histories.pop(chat_id, None)
+        forget(chat_id)
         active.pop(chat_id, None)
         send(chat_id, to_html(GREETING), markup=MENU)
         return
 
     if text == "/reset":
-        histories.pop(chat_id, None)
+        forget(chat_id)
         active.pop(chat_id, None)
         send(chat_id, "Диалог очищен.", as_html=False, markup=MENU)
         return
@@ -364,7 +378,7 @@ def handle_callback(query):
         return
 
     if ":" in data and data.split(":", 1)[0] in ("open", "prep", "tasks",
-                                                 "risks", "notes"):
+                                                 "notes"):
         action, project_id = data.split(":", 1)
         project = find_project_by_id(project_id)
         if not project:
@@ -381,10 +395,6 @@ def handle_callback(query):
             ask(chat_id, f"Подготовь меня к встрече с «{client}»")
         elif action == "tasks":
             ask(chat_id, f"Покажи открытые задачи по проекту «{client}»")
-        elif action == "risks":
-            ask(chat_id, f"Какие риски по проекту «{client}»? "
-                         f"Опирайся на просрочки, сдвиги сроков и нерешённые "
-                         f"вопросы из встреч.")
         elif action == "notes":
             send(chat_id, to_html(
                 f"Работаем по проекту **{client}**.\n\n"
@@ -408,6 +418,18 @@ def main():
 
     me = call("getMe")
     call("setMyCommands", commands=COMMANDS)
+
+    # Описание видно до нажатия Start, короткое — в профиле бота.
+    # Ставится программно, чтобы не настраивать руками у @BotFather.
+    try:
+        call("setMyDescription", description=(
+            "Помощник руководителя проектов внедрения AI-решений. "
+            "Разбирает заметки со встреч, ведёт реестр задач и готовит "
+            "к следующим встречам."))
+        call("setMyShortDescription", short_description=(
+            "Заметки со встречи → задачи в реестре и дедлайны в календаре"))
+    except RuntimeError as e:
+        print(f"Не удалось обновить описание бота: {e}", file=sys.stderr)
     print(f"Бот @{me['username']} запущен. Остановить: Ctrl+C")
     if not config.ALLOWED_USER_ID:
         print("Внимание: ALLOWED_USER_ID не задан, бот отвечает всем подряд.")

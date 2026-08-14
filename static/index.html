@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ассистент внедренца</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -27,32 +28,116 @@ header .meta{font-family:var(--mono);font-size:11px;color:var(--muted);
 header button{font:inherit;font-size:12px;background:none;border:1px solid var(--rule);
   border-radius:4px;padding:3px 10px;color:var(--muted);cursor:pointer}
 header button:hover{border-color:var(--muted);color:var(--ink)}
+header select{font:inherit;font-size:12px;background:var(--card);
+  border:1px solid var(--rule);border-radius:4px;padding:3px 8px;
+  color:var(--ink);cursor:pointer;max-width:210px}
+header select:focus{outline:none;border-color:var(--signal)}
+header select.chosen{border-color:var(--signal);color:var(--signal);
+  background:var(--signal-tint)}
 
-main{flex:1;display:grid;grid-template-columns:1fr 380px;min-height:0}
-#chat{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--rule)}
-#thread{flex:1;overflow-y:auto;padding:28px 32px;display:flex;
-  flex-direction:column;gap:24px}
+main{flex:1;display:grid;grid-template-columns:250px 1fr 360px;min-height:0}
+#chat{display:flex;flex-direction:column;min-height:0;
+  border-right:1px solid var(--rule)}
 
-.turn{max-width:70ch}
+/* Переключение проекта — главное действие в интерфейсе, поэтому оно
+   занимает постоянное место слева, а не прячется в выпадающий список. */
+#side{display:flex;flex-direction:column;min-height:0;
+  border-right:1px solid var(--rule);background:var(--card)}
+#side h2{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);padding:16px 18px 10px}
+#list{flex:1;overflow-y:auto;padding:0 10px 16px;display:flex;
+  flex-direction:column;gap:2px}
+#list .item{display:flex;align-items:center;gap:9px;width:100%;
+  text-align:left;font:inherit;background:none;border:none;
+  border-radius:7px;padding:9px 11px;cursor:pointer;
+  border-left:2px solid transparent}
+#list .txt{flex:1;min-width:0}
+#list .item:hover{background:var(--paper)}
+#list .item.active{background:var(--signal-tint);border-left-color:var(--signal)}
+#list .name{display:block;font-size:14px;font-weight:500;color:var(--ink);
+  line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#list .item.active .name{color:var(--signal)}
+#list .meta{display:block;font-size:12px;color:var(--muted);margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#list .pill{flex:none;font-size:11px;font-weight:500;background:#F4E2DE;
+  color:#8C2F22;border-radius:9px;padding:1px 7px}
+#list .dot{flex:none;width:7px;height:7px;border-radius:50%;
+  background:var(--signal);opacity:.45;margin-right:5px}
+#threads{flex:1;overflow-y:auto;position:relative}
+.thread{padding:28px 32px;display:flex;flex-direction:column;gap:24px;
+  max-width:1000px;margin:0 auto;width:100%}
+.thread[hidden]{display:none}
+
+.turn{max-width:86ch}
 .turn .who{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
   text-transform:uppercase;color:var(--muted);margin-bottom:6px}
 .turn.user .body{background:var(--card);border:1px solid var(--rule);
   border-radius:2px 10px 10px 10px;padding:12px 16px;white-space:pre-wrap}
-.turn.bot .body>*+*{margin-top:.7em}
-.turn.bot h1,.turn.bot h2,.turn.bot h3{font-size:15px;font-weight:600}
-.turn.bot ul,.turn.bot ol{padding-left:1.2em}
+.turn.bot .body>*+*{margin-top:1em}
+/* Заголовок раздела не должен выглядеть как ещё один пункт списка:
+   отсюда крупный кегль, тёмный цвет и много воздуха сверху. */
+.turn.bot h1,.turn.bot h2,.turn.bot h3{font-size:13px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink);
+  margin-top:2.2em;padding-top:1.1em;border-top:1px solid var(--rule)}
+.turn.bot .body>*:first-child{margin-top:0;padding-top:0;border-top:none}
+.turn.bot h1+*,.turn.bot h2+*,.turn.bot h3+*{margin-top:.9em}
+.turn.bot strong{font-weight:600}
+.turn.bot ul,.turn.bot ol{padding-left:1.3em;margin-left:2px;display:flex;
+  flex-direction:column;gap:.65em}
+.turn.bot li::marker{color:var(--muted)}
+.turn.bot p+ul,.turn.bot p+ol{margin-top:.5em}
 .turn.bot hr{border:none;border-top:1px solid var(--rule);margin:1em 0}
 .turn.bot code{font-family:var(--mono);font-size:13px}
 .turn.error .body{color:var(--danger);font-family:var(--mono);font-size:13px}
 
+.card{border:1px solid var(--rule);border-left:2px solid var(--signal);
+  border-radius:8px;padding:16px 18px;background:var(--card);max-width:86ch}
+.card h3{font-size:15px;font-weight:600;margin-bottom:2px}
+.card .sub{color:var(--muted);margin-bottom:12px}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;
+  font-size:14px;margin-bottom:14px}
+.card dt{color:var(--muted)}
+.card .bar{height:4px;background:var(--rule);border-radius:2px;
+  overflow:hidden;margin:0 0 14px}
+.card .bar span{display:block;height:100%;background:var(--signal)}
+/* История отделена от текущего состояния: прошлое полезно видеть,
+   но оно не должно спорить с тем, что нужно сделать сейчас. */
+.card .hist{border-top:1px solid var(--rule);padding-top:11px;
+  margin-bottom:14px;font-size:13px;color:var(--muted)}
+.card .hist b{color:var(--ink);font-weight:600}
+.card .hist-sum{margin-top:5px;line-height:1.5}
+.card.overview .nums{display:flex;flex-wrap:wrap;gap:22px;margin-bottom:14px}
+.card.overview .nums div{display:flex;flex-direction:column}
+.card.overview .nums b{font-size:22px;font-weight:600;line-height:1.1}
+.card.overview .nums span{font-size:12px;color:var(--muted);margin-top:2px}
+.card.overview .nums .bad b{color:#8C2F22}
+.card.overview .nums .good b{color:var(--signal)}
+.card h4{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);margin:16px 0 7px}
+.card .rows{list-style:none;display:flex;flex-direction:column;gap:6px;
+  font-size:13px;line-height:1.45}
+.card .rows b{font-weight:600}
+.card .when{color:var(--muted)}
+.card .acts{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+.card .acts button{font:inherit;font-size:13px;background:var(--paper);
+  border:1px solid var(--rule);border-radius:14px;padding:4px 13px;
+  color:var(--ink);cursor:pointer}
+.card .acts button:hover{border-color:var(--signal);color:var(--signal)}
+.card .acts button:disabled{opacity:.4;cursor:default}
+/* Просрочка должна цеплять взгляд, но не кричать: приглушённый фон
+   заметен при просмотре списка и не мешает читать текст подряд. */
+.overdue{background:#F4E2DE;color:#8C2F22;border-radius:3px;padding:0 4px}
+.soon{background:#F2EBDA;color:#7A5A16;border-radius:3px;padding:0 4px}
+/* Хорошее состояние отмечается тише плохого: цветом текста, без плашки.
+   Иначе интерфейс начинает поздравлять там, где достаточно не тревожить. */
+.ontime{color:var(--signal)}
+
 #empty{color:var(--muted);max-width:46ch}
 #empty p{margin-bottom:14px}
-#empty button{display:block;width:100%;text-align:left;font:inherit;font-size:14px;
-  background:var(--card);border:1px solid var(--rule);border-radius:6px;
-  padding:9px 14px;margin-bottom:7px;cursor:pointer;color:var(--ink)}
-#empty button:hover{border-color:var(--signal)}
 
-form{display:flex;gap:10px;padding:16px 32px 22px;border-top:1px solid var(--rule)}
+
+form{display:flex;gap:10px;padding:16px 32px 22px;max-width:1064px;
+  margin:0 auto;width:100%;border-top:1px solid var(--rule)}
 textarea{flex:1;font:inherit;resize:none;background:var(--card);color:var(--ink);
   border:1px solid var(--rule);border-radius:8px;padding:11px 14px;max-height:200px}
 textarea:focus{outline:none;border-color:var(--signal)}
@@ -67,7 +152,8 @@ form button:disabled{opacity:.4;cursor:default}
 aside{display:flex;flex-direction:column;min-height:0;background:var(--card)}
 aside h2{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
   text-transform:uppercase;color:var(--muted);padding:16px 20px 12px}
-#log{flex:1;overflow-y:auto;padding:0 20px 20px}
+#logs{flex:1;overflow-y:auto;padding:0 20px 20px}
+.log[hidden]{display:none}
 #log .hint{color:var(--muted);font-size:13px;max-width:32ch}
 
 .entry{border-left:2px solid var(--rule);padding:2px 0 14px 14px;margin-bottom:2px}
@@ -87,10 +173,22 @@ aside h2{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
   padding:6px 10px;color:var(--signal)}
 .entry .outcome a{color:inherit}
 
-@media (max-width:900px){
-  main{grid-template-columns:1fr;grid-template-rows:1fr auto}
+@media (max-width:1250px){
+  main{grid-template-columns:220px 1fr 320px}
+}
+@media (max-width:1050px){
+  main{grid-template-columns:210px 1fr}
+  aside{display:none}
+}
+@media (max-width:760px){
+  main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  #side{border-right:none;border-bottom:1px solid var(--rule)}
+  #side h2{display:none}
+  #list{flex-direction:row;overflow-x:auto;padding:10px;gap:6px}
+  #list .item{width:auto;white-space:nowrap;border-left:none;
+    border:1px solid var(--rule)}
+  #list .meta{display:none}
   #chat{border-right:none}
-  aside{border-top:1px solid var(--rule);max-height:38vh}
 }
 </style>
 </head>
@@ -100,21 +198,33 @@ aside h2{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
   <h1>Ассистент внедренца</h1>
   <div class="meta">
     <span id="model">…</span>
-    <span>таблица · календарь</span>
     <button id="reset">Начать заново</button>
   </div>
 </header>
 
 <main>
+  <nav id="side">
+    <h2>Проекты</h2>
+    <div id="list">
+      <button class="item active" data-id="">
+        <span class="txt">
+          <span class="name">Все проекты</span>
+          <span class="meta">Общие вопросы и сводки</span>
+        </span>
+      </button>
+    </div>
+  </nav>
+
   <section id="chat">
-    <div id="thread">
-      <div id="empty">
-        <p>Помощник знает три проекта внедрения, историю встреч и реестр задач.
-           Он может поднять контекст, а может записать новые задачи и дедлайны.</p>
-        <button data-ask="Подготовь меня к встрече с ТехноСнабом">Подготовь меня к встрече с ТехноСнабом</button>
-        <button data-ask="Что горит на этой неделе?">Что горит на этой неделе?</button>
-        <button data-ask="Что мы обещали Ромашке и не сделали?">Что мы обещали Ромашке и не сделали?</button>
-      </div>
+    <div id="threads">
+      <div class="thread" id="base"><div id="empty">
+        <p>Помощник знает проекты внедрения, историю встреч и реестр задач.
+           Он поднимает контекст, разбирает заметки и документы, а после
+           подтверждения записывает задачи в реестр и календарь.</p>
+        <p>Выберите проект в шапке — появится карточка с состоянием дел и
+           действиями по нему. Всё, что вы напишете или загрузите дальше,
+           будет отнесено к этому проекту.</p>
+      </div></div>
     </div>
     <form id="form">
       <input type="file" id="file" accept=".pdf,.docx,.txt,.md,.csv" hidden>
@@ -126,13 +236,53 @@ aside h2{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
 
   <aside>
     <h2>Журнал действий</h2>
-    <div id="log"><p class="hint">Здесь появится каждое обращение к таблице и календарю: что вызвано, с какими данными и что изменилось.</p></div>
+    <div id="logs"></div>
   </aside>
 </main>
 
 <script>
-const thread = document.getElementById('thread');
-const log = document.getElementById('log');
+marked.setOptions({breaks: true, gfm: true});
+
+const threads = document.getElementById('threads');
+const logs = document.getElementById('logs');
+
+// Лента и журнал у каждого проекта свои. Ключ "" — общая лента.
+const panes = {};
+let currentKey = '';
+
+function pane(key) {
+  if (panes[key]) return panes[key];
+
+  const thread = key === ''
+    ? document.getElementById('base')
+    : threads.appendChild(Object.assign(
+        document.createElement('div'), {className: 'thread'}));
+
+  const log = document.createElement('div');
+  log.className = 'log';
+  log.innerHTML = '<p class="hint">Здесь появится каждое обращение к таблице '
+    + 'и календарю: что вызвано, с какими данными и что изменилось.</p>';
+  logs.appendChild(log);
+
+  panes[key] = {thread, log, started: false};
+  return panes[key];
+}
+
+function showPane(key) {
+  Object.entries(panes).forEach(([k, p]) => {
+    p.thread.hidden = k !== key;
+    p.log.hidden = k !== key;
+  });
+  currentKey = key;
+  pane(key);
+  panes[key].thread.hidden = false;
+  panes[key].log.hidden = false;
+  empty.hidden = key !== '' || panes[''].started;
+  threads.scrollTop = threads.scrollHeight;
+}
+
+const thread = () => pane(currentKey).thread;
+const log = () => pane(currentKey).log;
 const input = document.getElementById('input');
 const send = document.getElementById('send');
 const empty = document.getElementById('empty');
@@ -148,8 +298,224 @@ const LABELS = {
   grounding_check:     'проверка реестра',
 };
 
-fetch('/api/status').then(r => r.json())
-  .then(d => document.getElementById('model').textContent = d.model);
+const list = document.getElementById('list');
+
+fetch('/api/status').then(r => r.json()).then(d => {
+  document.getElementById('model').textContent = d.model;
+
+  (d.projects || []).forEach(p => {
+    const item = document.createElement('button');
+    item.className = 'item';
+    item.dataset.id = p.id;
+    // Число просрочек прямо в списке: видно, куда смотреть, ещё до захода
+    // в проект. Само по себе число — ребус, поэтому оно расшифровано
+    // словами в строке под названием.
+    // Состояние — одним индикатором справа: цифра, когда есть просрочки,
+    // и спокойная точка, когда всё в срок. Хорошие новости тоже видны,
+    // но не занимают места.
+    const mark = p.overdue
+      ? `<span class="pill" title="${p.overdue} ${plural(p.overdue,
+          'задача просрочена', 'задачи просрочены', 'задач просрочено')}">${p.overdue}</span>`
+      : `<span class="dot" title="Все задачи в срок"></span>`;
+    item.innerHTML = `
+      <span class="txt">
+        <span class="name">${esc(p.client)}</span>
+        <span class="meta">${esc(p.stage)} · ${p.open} ${plural(p.open,
+          'задача', 'задачи', 'задач')}</span>
+      </span>${mark}`;
+    list.appendChild(item);
+  });
+
+  if (d.error || !(d.projects || []).length) {
+    const note = document.createElement('div');
+    note.className = 'meta';
+    note.style.padding = '8px 11px';
+    note.textContent = d.error ? 'Ошибка чтения таблицы' : 'Проекты не найдены';
+    list.appendChild(note);
+    if (d.error) console.error('Список проектов:', d.error);
+  }
+
+  selectProject(d.active || '', false);
+});
+
+function plural(n, one, few, many) {
+  const mod100 = n % 100, mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
+function esc(t) {
+  return String(t ?? '').replace(/[<>&]/g,
+    c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+list.addEventListener('click', e => {
+  const item = e.target.closest('.item');
+  if (item) selectProject(item.dataset.id, true);
+});
+
+const lastCard = {};
+
+async function selectProject(id, fromClick) {
+  list.querySelectorAll('.item').forEach(
+    i => i.classList.toggle('active', i.dataset.id === id));
+  showPane(id);
+
+  if (!id) {
+    input.placeholder = 'Спросите, вставьте заметки или прикрепите документ…';
+    const data = await (await fetch('/api/overview')).json();
+    const existing = panes[''].thread.querySelector('.card');
+    if (existing) existing.remove();
+    showOverview(data);
+    await fetch('/api/project', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({project_id: ''}),
+    });
+    return;
+  }
+
+  const res = await fetch('/api/project', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({project_id: id}),
+  });
+  const data = await res.json();
+
+  if (!data.card) {
+    input.placeholder = 'Спросите, вставьте заметки или прикрепите документ…';
+    return;
+  }
+
+  // Карточка обновляется при каждом входе в проект: цифры за это время
+  // могли измениться. В начале ленты она одна, а не копится.
+  lastCard[id] = data.card;
+  const existing = panes[id].thread.querySelector('.card');
+  if (existing) existing.remove();
+  showCard(data.card, true);
+  input.placeholder = `Заметки и вопросы по проекту «${data.card.client}»…`;
+  if (fromClick) input.focus();
+}
+
+// Карточка собрана на сервере из реестра — показываем сразу, без запроса
+// к модели. Кнопки под ней ведут к тому, где интерпретация действительно
+// нужна: бриф, разбор задач, разбор заметок.
+// Общая лента открывается сводкой: сколько проектов, что просрочено,
+// что впереди. Без неё «Все проекты» — пустой экран, и общей картины нет.
+function showOverview(d) {
+  empty.hidden = true;
+  const pct = d.total ? Math.round(d.done * 100 / d.total) : 0;
+
+  const attention = d.attention.length
+    ? d.attention.map(t => `<li><b>${esc(t.id)}</b> · ${esc(t.client)} —
+        ${esc(t.task)} <span class="overdue">${t.late} ${plural(t.late,
+        'день', 'дня', 'дней')}</span></li>`).join('')
+    : '<li class="ontime">Просроченных задач нет</li>';
+
+  const upcoming = d.upcoming.length
+    ? d.upcoming.map(t => `<li><b>${esc(t.id)}</b> · ${esc(t.client)} —
+        ${esc(t.task)} <span class="when">${esc(t.due)}</span></li>`).join('')
+    : '<li>Ближайших сроков нет</li>';
+
+  const el = document.createElement('div');
+  el.className = 'card overview';
+  el.innerHTML = `
+    <h3>Все проекты</h3>
+    <div class="sub">Общая картина на сегодня</div>
+    <div class="nums">
+      <div><b>${d.projects}</b><span>${plural(d.projects,
+        'проект', 'проекта', 'проектов')}</span></div>
+      <div><b>${d.open}</b><span>открытых задач</span></div>
+      <div class="${d.overdue ? 'bad' : 'good'}"><b>${d.overdue}</b><span>просрочено</span></div>
+      <div><b>${d.done}</b><span>закрыто из ${d.total}</span></div>
+      <div><b>${d.meetings}</b><span>${plural(d.meetings,
+        'встреча', 'встречи', 'встреч')} в истории</span></div>
+    </div>
+    <div class="bar"><span style="width:${pct}%"></span></div>
+    <h4>Требует внимания</h4>
+    <ul class="rows">${attention}</ul>
+    <h4>Ближайшие сроки</h4>
+    <ul class="rows">${upcoming}</ul>
+    <div class="acts">
+      <button data-ask="Что просрочено и что горит на этой неделе? Сгруппируй по заказчикам.">Разобрать подробнее</button>
+      <button data-ask="Найди похожие открытые задачи у разных заказчиков. По каждой группе скажи, что можно сделать один раз шаблоном, а что придётся персонализировать.">Похожие задачи</button>
+    </div>`;
+
+  el.querySelector('.acts').addEventListener('click', e => {
+    const button = e.target.closest('button');
+    if (!button || send.disabled) return;
+    input.value = button.dataset.ask;
+    submit();
+  });
+
+  const box = thread();
+  if (box.firstChild) box.insertBefore(el, box.firstChild);
+  else box.appendChild(el);
+  threads.scrollTop = 0;
+}
+
+function showCard(card, atTop) {
+  if (!card) return;
+  empty.hidden = true;
+  const done = card.percent === null
+    ? 'задач нет'
+    : `${card.percent}% (${card.done} из ${card.total} задач)`;
+  const tasks = card.overdue
+    ? `${card.open}, из них <span class="overdue">${card.overdue} ${plural(
+        card.overdue, 'просрочена', 'просрочены', 'просрочено')}</span>`
+    : `${card.open} · <span class="ontime">все в срок</span>`;
+
+  const pct = card.percent === null ? 0 : card.percent;
+  const history = card.last_meeting
+    ? `<div class="hist">
+         <div class="hist-row"><b>${card.meetings_count}</b> ${plural(
+           card.meetings_count, 'встреча', 'встречи', 'встреч')} ·
+           последняя ${esc(card.last_meeting.date)} ·
+           закрыто с неё <b>${card.closed_since}</b> ${plural(
+             card.closed_since, 'задача', 'задачи', 'задач')}</div>
+         <div class="hist-sum">${esc(card.last_meeting.summary)}</div>
+       </div>`
+    : '<div class="hist"><div class="hist-row">Встреч пока не было</div></div>';
+
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `
+    <h3>${esc(card.client)}</h3>
+    <div class="sub">${esc(card.project)}</div>
+    <div class="bar"><span style="width:${pct}%"></span></div>
+    <dl>
+      <dt>Этап</dt><dd>${esc(card.stage)}</dd>
+      <dt>Выполнено</dt><dd>${esc(done)}</dd>
+      <dt>Сроки</dt><dd>${esc(card.started)} — ${accent(esc(card.deadline))}</dd>
+      <dt>Открытых задач</dt><dd>${tasks}</dd>
+      <dt>Контакт</dt><dd>${esc(card.contact)}</dd>
+    </dl>
+    ${history}
+    <div class="acts">
+      <button data-ask="Подготовь меня к встрече с «${esc(card.client)}»">Подготовить к встрече</button>
+      <button data-ask="Покажи открытые задачи по проекту «${esc(card.client)}» с ответственными и сроками">Открытые задачи</button>
+      <button data-notes>Внести заметки или файл</button>
+    </div>`;
+
+  el.querySelector('.acts').addEventListener('click', e => {
+    const button = e.target.closest('button');
+    if (!button || send.disabled) return;
+    if (button.hasAttribute('data-notes')) {
+      input.focus();
+      input.placeholder = `Вставьте заметки или прикрепите файл по «${card.client}»…`;
+      return;
+    }
+    input.value = button.dataset.ask;
+    submit();
+  });
+
+  const box = thread();
+  if (atTop && box.firstChild) box.insertBefore(el, box.firstChild);
+  else box.appendChild(el);
+  threads.scrollTop = atTop ? 0 : threads.scrollHeight;
+}
 
 input.addEventListener('input', () => {
   input.style.height = 'auto';
@@ -161,22 +527,41 @@ input.addEventListener('keydown', e => {
 document.getElementById('form').addEventListener('submit', e => {
   e.preventDefault(); submit();
 });
-empty.addEventListener('click', e => {
-  const ask = e.target.dataset.ask;
-  if (ask) { input.value = ask; submit(); }
-});
 document.getElementById('reset').addEventListener('click', async () => {
   await fetch('/api/reset', {method: 'POST'});
-  thread.innerHTML = ''; thread.appendChild(empty); empty.hidden = false;
-  log.innerHTML = '<p class="hint">Журнал очищен.</p>';
+  const p = pane(currentKey);
+  p.thread.innerHTML = '';
+  p.started = false;
+  p.log.innerHTML = '<p class="hint">Журнал очищен.</p>';
+  if (currentKey === '') {
+    p.thread.appendChild(empty);
+  } else {
+    showCard(lastCard[currentKey]);
+  }
+  if (currentKey === '') selectProject('', false);
 });
+
+// Подсветка расставляется по готовому HTML. Ограничение [^<>] не даёт
+// регулярке залезть внутрь тегов и сломать разметку.
+// \w в JavaScript не включает кириллицу, поэтому окончания слов
+// перечисляются явным диапазоном — иначе «дней» обрежется до «дн».
+const OVERDUE = /(просрочен[оаы][^<>.,;)]*?\d+\s*(?:рабочих\s*)?дн[а-яё]*|\d+\s+просрочен[оаы]|срок\s+прош[её]л[^<>.,;)]*?назад|срок\s+ист[её]к\s+\d{2}\.\d{2}\.\d{4})/gi;
+// Подсвечиваем только настоящую спешку: до девяти дней включительно.
+// «Осталось 66 рабочих дней» — не новость и не должно мигать.
+const SOON = /(осталось\s+[1-9]\s*(?:рабочих\s*)?дн[а-яё]*|это\s+сегодня)/gi;
+
+function accent(html) {
+  return html
+    .replace(OVERDUE, '<span class="overdue">$1</span>')
+    .replace(SOON, '<span class="soon">$1</span>');
+}
 
 function turn(kind, who, html) {
   const el = document.createElement('div');
   el.className = 'turn ' + kind;
   el.innerHTML = `<div class="who">${who}</div><div class="body">${html}</div>`;
-  thread.appendChild(el);
-  thread.scrollTop = thread.scrollHeight;
+  thread().appendChild(el);
+  threads.scrollTop = threads.scrollHeight;
   return el;
 }
 
@@ -188,24 +573,29 @@ function d(value) {
 
 function describe(action) {
   const r = action.result || {};
-  if (action.failed) return r.error;
+  // Значения приходят из таблицы и от модели — экранируем всё, что
+  // попадёт в разметку. Угловая скобка в названии задачи иначе ломает
+  // журнал, а в худшем случае исполняется как код.
+  if (action.failed) return esc(r.error);
   if (action.name === 'add_tasks') {
     const parts = [];
     if ((r.created || []).length)
-      parts.push(`Записано в реестр: ${r.created.join(', ')} — проект «${r.project}»`);
+      parts.push(`Записано в реестр: ${esc(r.created.join(', '))} — проект «${esc(r.project)}»`);
     (r.skipped_as_duplicates || []).forEach(x =>
-      parts.push(`Пропущено как дубль: «${x.proposed}» — уже есть ${x.existing_id} (срок ${d(x.existing_due)})`));
+      parts.push(`Пропущено как дубль: «${esc(x.proposed)}» — уже есть ${esc(x.existing_id)} (срок ${esc(d(x.existing_due))})`));
     return parts.join('<br>') || 'Нечего записывать';
   }
   if (action.name === 'update_task')
-    return `${r.updated}: срок ${d(r.due)}, статус ${r.status}`;
+    return `${esc(r.updated)}: срок ${esc(d(r.due))}, статус ${esc(r.status)}`;
   if (action.name === 'create_deadline')
-    return r.link ? `Создано «${r.created}» на ${d(r.date)} — <a href="${r.link}" target="_blank">открыть</a>`
-                  : `Создано «${r.created}» на ${d(r.date)}`;
+    return r.link
+      ? `Создано «${esc(r.created)}» на ${esc(d(r.date))} — `
+        + `<a href="${encodeURI(r.link)}" target="_blank" rel="noopener">открыть</a>`
+      : `Создано «${esc(r.created)}» на ${esc(d(r.date))}`;
   if (action.name === 'get_project_context')
-    return r.project ? `Проект ${r.project.project_id}, встреч: ${(r.meetings || []).length}, открытых задач: ${(r.open_tasks || []).length}` : '';
+    return r.project ? `Проект ${esc(r.project.project_id)}, встреч: ${(r.meetings || []).length}, открытых задач: ${(r.open_tasks || []).length}` : '';
   if (action.name === 'grounding_check')
-    return `Несуществующие номера: ${(action.args.unknown || []).join(', ')} — ответ отправлен на исправление`;
+    return `Несуществующие номера: ${esc((action.args.unknown || []).join(', '))} — ответ отправлен на исправление`;
   if (action.name === 'list_overdue_tasks') {
     const undated = (r.without_due || []).length;
     return `Просрочено: ${(r.overdue || []).length}, ближайших: ${(r.upcoming || []).length}`
@@ -215,17 +605,18 @@ function describe(action) {
 }
 
 function logAction(action) {
-  if (log.querySelector('.hint')) log.innerHTML = '';
+  const box = log();
+  if (box.querySelector('.hint')) box.innerHTML = '';
   const el = document.createElement('div');
   el.className = 'entry' + (action.write ? ' write' : '') + (action.failed ? ' failed' : '');
   const args = JSON.stringify(action.args || {});
   el.innerHTML = `
-    <div class="row"><span class="name">${LABELS[action.name] || action.name}</span>
+    <div class="row"><span class="name">${esc(LABELS[action.name] || action.name)}</span>
       <span class="kind">${action.failed ? 'сбой' : action.write ? 'запись' : 'чтение'}</span></div>
-    <div class="args">${args.length > 160 ? args.slice(0, 160) + '…' : args}</div>
+    <div class="args">${esc(args.length > 160 ? args.slice(0, 160) + '…' : args)}</div>
     <div class="outcome">${describe(action)}</div>`;
-  log.appendChild(el);
-  log.scrollTop = log.scrollHeight;
+  box.appendChild(el);
+  logs.scrollTop = logs.scrollHeight;
 }
 
 attach.addEventListener('click', () => fileInput.click());
@@ -243,9 +634,10 @@ async function submit() {
   if ((!text && !file) || send.disabled) return;
 
   empty.hidden = true;
+  pane(currentKey).started = true;
   input.value = ''; input.style.height = 'auto';
   send.disabled = true;
-  const esc = t => t.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  document.querySelectorAll('.card button').forEach(b => b.disabled = true);
   turn('user', 'вы', (file ? `<b>📎 ${esc(file.name)}</b><br>` : '') + esc(text));
   const pending = turn('bot', 'ассистент', '<span style="color:var(--muted)">думает…</span>');
 
@@ -270,7 +662,7 @@ async function submit() {
       pending.className = 'turn error';
       pending.querySelector('.body').textContent = data.error;
     } else {
-      pending.querySelector('.body').innerHTML = marked.parse(data.reply || '');
+      pending.querySelector('.body').innerHTML = accent(marked.parse(data.reply || ''));
       if (data.waited)
         pending.querySelector('.body').insertAdjacentHTML('beforeend',
           `<p style="color:var(--muted);font-size:13px">Пауза ${data.waited} с — лимит запросов бесплатного тарифа.</p>`);
@@ -284,8 +676,9 @@ async function submit() {
   attach.classList.remove('armed');
   attach.textContent = 'Файл';
   send.disabled = false;
+  document.querySelectorAll('.card button').forEach(b => b.disabled = false);
   input.focus();
-  thread.scrollTop = thread.scrollHeight;
+  threads.scrollTop = threads.scrollHeight;
 }
 </script>
 </body>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#191C18"/>
+  <!-- Точка над i выделена цветом акцента: тот же, которым в журнале
+       помечаются записи в реестр. -->
+  <circle cx="32" cy="20" r="3.6" fill="#4E9E85"/>
+  <text x="32" y="46" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif" font-size="27"
+        font-weight="600" letter-spacing="-0.5" fill="#F3F5F0">MiR</text>
+</svg>

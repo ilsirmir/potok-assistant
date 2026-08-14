@@ -30,29 +30,42 @@ def get_project_context(client):
         return {"error": f"Проект не найден. Известные клиенты: {known}"}
 
     pid = project["project_id"]
-    open_tasks = sheets.get_tasks(pid, only_open=True)
     today = _today()
+    all_tasks = sheets.get_tasks(pid)
+    open_tasks = [t for t in all_tasks if t["status"] != "Выполнена"]
 
-    # Просрочки помечаем прямо здесь: модель хуже сравнивает даты, чем код.
-    overdue = [
-        {"task_id": t["task_id"], "task": t["task"], "owner": t["owner"],
-         "due": t["due"], "days_late": (today - sheets.parse_date(t["due"])).days}
-        for t in open_tasks
-        if sheets.parse_date(t["due"]) and sheets.parse_date(t["due"]) < today
+    # Просрочку считаем здесь и кладём прямо в задачу: модель хуже
+    # сравнивает даты, чем код, а дублировать список просроченных отдельно
+    # значит удвоить контекст и дать повод запутаться.
+    open_with_late = []
+    for task in open_tasks:
+        due = sheets.parse_date(task["due"])
+        item = _clean(task)
+        if due and due < today:
+            item["days_late"] = (today - due).days
+        open_with_late.append(item)
+
+    # Закрытые задачи нужны, чтобы показать, что сделано с прошлой встречи.
+    meetings = sheets.get_meetings(pid)
+    last_meeting = sheets.parse_date(meetings[-1]["date"]) if meetings else None
+    closed = [
+        _clean(t) for t in all_tasks
+        if t["status"] == "Выполнена"
+        and (not last_meeting or (sheets.parse_date(t["due"]) or today) >= last_meeting)
     ]
 
     return {
         "project": _clean(project),
+        "closed_since_last_meeting": closed,
         "progress": dict(
             sheets.project_progress(pid),
             planned_finish=project.get("planned_finish", ""),
             deadline_note=sheets.deadline_note(project.get("planned_finish")),
             working_days_left=sheets.working_days_left(project.get("planned_finish")),
         ),
-        "meetings": [_clean(m) for m in sheets.get_meetings(pid)[-4:]],
-        "open_tasks": [_clean(t) for t in open_tasks],
-        "overdue_tasks": overdue,
-        "closed_count": len(sheets.get_tasks(pid)) - len(open_tasks),
+        "meetings": [_clean(m) for m in meetings[-4:]],
+        "open_tasks": open_with_late,
+        "closed_count": len(all_tasks) - len(open_tasks),
     }
 
 
@@ -94,7 +107,25 @@ def find_similar_tasks():
     groups = sheets.similar_task_groups()
     if not groups:
         return {"groups": [], "note": "Похожих задач между проектами не найдено"}
-    return {"groups": groups, "count": len(groups)}
+
+    # Просрочку считаем здесь: по ней модель определяет, с какой темы
+    # выгоднее начать.
+    today = _today()
+    enriched = []
+    for group in groups:
+        tasks = []
+        for task in group:
+            due = sheets.parse_date(task["due"])
+            tasks.append(dict(
+                task,
+                days_late=(today - due).days if due and due < today else 0,
+            ))
+        enriched.append({
+            "tasks": tasks,
+            "overdue_count": len([t for t in tasks if t["days_late"]]),
+        })
+
+    return {"groups": enriched, "count": len(enriched)}
 
 
 def add_tasks(client, tasks):

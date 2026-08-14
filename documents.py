@@ -26,8 +26,14 @@ def _from_pdf(data):
     except ImportError:
         raise UnsupportedFile("не установлен pypdf: pip install pypdf")
 
-    reader = PdfReader(io.BytesIO(data))
-    pages = [page.extract_text() or "" for page in reader.pages]
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        pages = [page.extract_text() or "" for page in reader.pages]
+    except Exception:
+        # Библиотека кидает свои исключения с техническими текстами.
+        # Человеку нужна причина, а не имя класса ошибки.
+        raise UnsupportedFile(
+            "файл повреждён или это не PDF, несмотря на расширение")
     text = "\n\n".join(pages).strip()
     if not text:
         raise UnsupportedFile(
@@ -42,15 +48,23 @@ def _from_docx(data):
     except ImportError:
         raise UnsupportedFile("не установлен python-docx: pip install python-docx")
 
-    document = docx.Document(io.BytesIO(data))
+    try:
+        document = docx.Document(io.BytesIO(data))
+    except Exception:
+        raise UnsupportedFile(
+            "файл повреждён или это не DOCX. Если это старый .doc — "
+            "пересохраните как .docx")
     parts = [p.text for p in document.paragraphs if p.text.strip()]
 
     # Требования в ТЗ часто лежат в таблицах, а не в абзацах.
-    for table in document.tables:
-        for row in table.rows:
-            cells = [c.text.strip() for c in row.cells if c.text.strip()]
-            if cells:
-                parts.append(" | ".join(cells))
+    try:
+        for table in document.tables:
+            for row in table.rows:
+                cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+    except Exception:
+        pass  # Таблицы — бонус: если не прочитались, абзацы всё равно есть.
 
     return "\n".join(parts).strip()
 
