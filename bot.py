@@ -2,8 +2,8 @@
 
     python bot.py
 
-Использует long polling, поэтому не требует внешнего адреса и запускается
-где угодно. История диалога хранится в памяти процесса, по одной на чат.
+Long polling, поэтому не нужен внешний адрес. История диалога хранится
+в памяти процесса, по одной на чат.
 """
 
 import html
@@ -15,11 +15,25 @@ import requests
 
 import agent
 import config
+import documents
 import sheets
 import tools
 
 API = "https://api.telegram.org/bot{token}/{method}"
 LIMIT = 4000  # Telegram режет сообщения длиннее 4096 символов
+SHEET_URL = "https://docs.google.com/spreadsheets/d/{id}/edit"
+
+MENU = {"keyboard": [
+    [{"text": "Что горит"}, {"text": "Проекты"}],
+    [{"text": "Подготовка к встрече"}],
+], "resize_keyboard": True}
+
+COMMANDS = [
+    {"command": "start", "description": "Что умеет помощник"},
+    {"command": "tasks", "description": "Что просрочено и что горит"},
+    {"command": "projects", "description": "Список проектов"},
+    {"command": "reset", "description": "Начать диалог заново"},
+]
 
 TOOL_LABELS = {
     "get_project_context": "поднял контекст проекта",
@@ -30,8 +44,20 @@ TOOL_LABELS = {
     "grounding_check": "поймал ссылку на несуществующую задачу",
 }
 
+GREETING = (
+    "Помощник руководителя проектов внедрения.\n\n"
+    "Что умею:\n"
+    "- подготовить к встрече и напомнить прошлые договорённости\n"
+    "- показать, что просрочено и что горит\n"
+    "- разобрать заметки со встречи и записать задачи в реестр\n"
+    "- прочитать документ: пришлите PDF, DOCX или TXT файлом\n\n"
+    "Пользуйтесь кнопками внизу или пишите словами."
+)
+
 histories = {}
 
+
+# --- Telegram API ----------------------------------------------------------
 
 def call(method, **params):
     response = requests.post(API.format(token=config.TELEGRAM_TOKEN, method=method),
@@ -58,18 +84,21 @@ def to_html(text):
     return text
 
 
-def send(chat_id, text, as_html=True):
-    for start in range(0, len(text), LIMIT):
-        chunk = text[start:start + LIMIT]
+def send(chat_id, text, as_html=True, markup=None):
+    chunks = [text[i:i + LIMIT] for i in range(0, len(text), LIMIT)] or [""]
+    for index, chunk in enumerate(chunks):
         params = {"chat_id": chat_id, "text": chunk,
                   "disable_web_page_preview": True}
         if as_html:
             params["parse_mode"] = "HTML"
+        # Клавиатуру вешаем только на последнее сообщение серии.
+        if markup and index == len(chunks) - 1:
+            params["reply_markup"] = markup
         try:
             call("sendMessage", **params)
         except RuntimeError:
-            # Если разметка всё же не понравилась — отправляем как есть.
-            call("sendMessage", chat_id=chat_id, text=chunk)
+            params.pop("parse_mode", None)
+            call("sendMessage", **params)
 
 
 def allowed(user_id):
@@ -79,37 +108,45 @@ def allowed(user_id):
     return str(user_id) == str(config.ALLOWED_USER_ID)
 
 
-def handle(message):
-    chat_id = message["chat"]["id"]
-    user_id = message["from"]["id"]
-    text = (message.get("text") or "").strip()
+# --- Клавиатуры ------------------------------------------------------------
 
-    if not allowed(user_id):
-        send(chat_id, "Этот бот приватный.", as_html=False)
-        return
-    if not text:
-        send(chat_id, "Пришлите текст — вопрос или заметки со встречи.",
-             as_html=False)
-        return
+def project_keyboard():
+    """Инлайн-кнопки со списком проектов.
 
-    if text in ("/start", "/help"):
-        histories.pop(chat_id, None)
-        send(chat_id, to_html(
-            "Помощник руководителя проектов внедрения.\n\n"
-            "Что умею:\n"
-            "- подготовить к встрече и напомнить прошлые договорённости\n"
-            "- показать, что просрочено и что горит\n"
-            "- разобрать заметки со встречи и записать задачи в реестр\n\n"
-            "Просто напишите: **подготовь меня к встрече с ТехноСнабом**\n"
-            "или пришлите заметки текстом.\n\n"
-            "/reset — начать диалог заново"))
-        return
+    Выбор кнопкой вместо набора названия заодно снимает вопрос склонений:
+    в агента уходит точное имя клиента из реестра.
+    """
+    rows = [[{"text": p["client"], "callback_data": f"prep:{p['project_id']}"}]
+            for p in sheets.get_projects()]
+    return {"inline_keyboard": rows} if rows else None
 
-    if text == "/reset":
-        histories.pop(chat_id, None)
-        send(chat_id, "Диалог очищен.", as_html=False)
-        return
 
+def after_reply_keyboard(reply, actions):
+    """Кнопки под ответом: подтверждение или ссылка на результат."""
+    buttons = []
+
+    for name, result in actions:
+        if name == "create_deadline" and isinstance(result, dict) and result.get("link"):
+            buttons.append([{"text": "Открыть событие", "url": result["link"]}])
+        if name in ("add_tasks", "update_task") and config.SHEET_ID:
+            link = SHEET_URL.format(id=config.SHEET_ID)
+            if not any(b[0].get("url") == link for b in buttons):
+                buttons.append([{"text": "Открыть реестр", "url": link}])
+
+    # Ассистент ждёт подтверждения — не заставляем печатать «да».
+    if not buttons and re.search(r"[Пп]одтвержда(ете|йте)|[Пп]одтвердите", reply or ""):
+        buttons.append([
+            {"text": "Записать", "callback_data": "confirm:yes"},
+            {"text": "Отменить", "callback_data": "confirm:no"},
+        ])
+
+    return {"inline_keyboard": buttons} if buttons else None
+
+
+# --- Работа с агентом ------------------------------------------------------
+
+def ask(chat_id, text):
+    """Один ход диалога: отправляет текст агенту и печатает ответ."""
     call("sendChatAction", chat_id=chat_id, action="typing")
 
     actions = []
@@ -129,16 +166,17 @@ def handle(message):
         return
 
     histories[chat_id] = result
-    send(chat_id, to_html(agent.last_reply(result)))
+    reply = agent.last_reply(result)
+    send(chat_id, to_html(reply), markup=after_reply_keyboard(reply, actions))
 
-    # Совершённые действия показываем отдельной строкой: в чате не видно
-    # журнала, а понимать, что именно изменилось, человеку необходимо.
+    # Совершённые действия показываем отдельной строкой: в чате нет журнала,
+    # а понимать, что именно изменилось, человеку необходимо.
     done = []
     for name, res in actions:
-        if name not in tools.WRITE_TOOLS:
+        if name not in tools.WRITE_TOOLS or not isinstance(res, dict):
             continue
         label = TOOL_LABELS.get(name, name)
-        if isinstance(res, dict) and res.get("error"):
+        if res.get("error"):
             done.append(f"не удалось: {label} — {res['error']}")
         elif name == "add_tasks" and res.get("created"):
             done.append(f"{label}: {', '.join(res['created'])}")
@@ -152,10 +190,147 @@ def handle(message):
     if done:
         send(chat_id, to_html("**Сделано:**\n" + "\n".join(f"- {d}" for d in done)))
 
+
+def show_projects(chat_id):
+    """Список проектов берём из таблицы напрямую.
+
+    Тратить вызов модели на то, что можно прочитать из реестра, незачем:
+    ответ приходит мгновенно и не расходует квоту.
+    """
+    projects = sheets.get_projects()
+    if not projects:
+        send(chat_id, "В реестре нет проектов.", as_html=False)
+        return
+
+    lines = []
+    for p in projects:
+        open_tasks = sheets.get_tasks(p["project_id"], only_open=True)
+        lines.append(
+            f"**{p['client']}** — {p['project']}\n"
+            f"Этап: {p['stage']} · открытых задач: {len(open_tasks)}\n"
+            f"Контакт: {p['client_contact']}")
+    send(chat_id, to_html("\n\n".join(lines)))
+
+
+# --- Обработка сообщений ---------------------------------------------------
+
+def download(file_id):
+    info = call("getFile", file_id=file_id)
+    url = (f"https://api.telegram.org/file/bot{config.TELEGRAM_TOKEN}"
+           f"/{info['file_path']}")
+    return requests.get(url, timeout=60).content
+
+
+def read_document(chat_id, document, caption):
+    """Скачивает вложение и превращает в текст сообщения для агента."""
+    name = document.get("file_name", "документ")
+    if document.get("file_size", 0) > 20 * 1024 * 1024:
+        send(chat_id, "Файл больше 20 МБ — Telegram не отдаёт такие ботам.",
+             as_html=False)
+        return None
+
+    call("sendChatAction", chat_id=chat_id, action="typing")
+    try:
+        text = documents.as_message(name, download(document["file_id"]))
+    except documents.UnsupportedFile as e:
+        send(chat_id, f"Не смог прочитать «{name}»: {e}", as_html=False)
+        return None
+    except Exception as e:
+        send(chat_id, f"Ошибка при чтении файла: {e}", as_html=False)
+        return None
+
+    return f"{caption}\n\n{text}" if caption else text
+
+
+def handle_message(message):
+    chat_id = message["chat"]["id"]
+    text = (message.get("text") or "").strip()
+
+    if not allowed(message["from"]["id"]):
+        send(chat_id, "Этот бот приватный.", as_html=False)
+        return
+
+    if message.get("document"):
+        text = read_document(chat_id, message["document"],
+                             (message.get("caption") or "").strip())
+        if not text:
+            return
+
+    if not text:
+        send(chat_id, "Пришлите текст или документ — вопрос, заметки "
+                      "со встречи или файл с ТЗ.", as_html=False)
+        return
+
+    if text in ("/start", "/help"):
+        histories.pop(chat_id, None)
+        send(chat_id, to_html(GREETING), markup=MENU)
+        return
+
+    if text == "/reset":
+        histories.pop(chat_id, None)
+        send(chat_id, "Диалог очищен.", as_html=False, markup=MENU)
+        return
+
+    if text in ("/projects", "Проекты"):
+        show_projects(chat_id)
+        return
+
+    if text in ("/tasks", "Что горит"):
+        ask(chat_id, "Что просрочено и что горит на этой неделе?")
+        return
+
+    if text == "Подготовка к встрече":
+        keyboard = project_keyboard()
+        if keyboard:
+            send(chat_id, "С каким заказчиком встреча?", as_html=False,
+                 markup=keyboard)
+        else:
+            send(chat_id, "В реестре нет проектов.", as_html=False)
+        return
+
+    ask(chat_id, text)
+
+
+def handle_callback(query):
+    chat_id = query["message"]["chat"]["id"]
+    data = query.get("data", "")
+
+    if not allowed(query["from"]["id"]):
+        call("answerCallbackQuery", callback_query_id=query["id"],
+             text="Бот приватный")
+        return
+
+    call("answerCallbackQuery", callback_query_id=query["id"])
+    # Кнопки одноразовые: убираем их, чтобы нельзя было нажать дважды.
+    try:
+        call("editMessageReplyMarkup", chat_id=chat_id,
+             message_id=query["message"]["message_id"],
+             reply_markup={"inline_keyboard": []})
+    except RuntimeError:
+        pass
+
+    if data.startswith("prep:"):
+        project = next((p for p in sheets.get_projects()
+                        if p["project_id"] == data.split(":", 1)[1]), None)
+        if not project:
+            send(chat_id, "Проект не найден.", as_html=False)
+            return
+        ask(chat_id, f"Подготовь меня к встрече с «{project['client']}»")
+
+    elif data == "confirm:yes":
+        ask(chat_id, "Да, подтверждаю. Вноси изменения.")
+
+    elif data == "confirm:no":
+        send(chat_id, "Отменил, ничего не записываю.", as_html=False)
+
+
+# --- Запуск ----------------------------------------------------------------
+
 def main():
     config.require("TELEGRAM_TOKEN", "LLM_API_KEY", "SHEET_ID", "CALENDAR_ID")
 
     me = call("getMe")
+    call("setMyCommands", commands=COMMANDS)
     print(f"Бот @{me['username']} запущен. Остановить: Ctrl+C")
     if not config.ALLOWED_USER_ID:
         print("Внимание: ALLOWED_USER_ID не задан, бот отвечает всем подряд.")
@@ -164,7 +339,7 @@ def main():
     while True:
         try:
             updates = call("getUpdates", offset=offset, timeout=50,
-                           allowed_updates=["message"])
+                           allowed_updates=["message", "callback_query"])
         except KeyboardInterrupt:
             return
         except Exception as e:
@@ -174,11 +349,13 @@ def main():
 
         for update in updates:
             offset = update["update_id"] + 1
-            if "message" in update:
-                try:
-                    handle(update["message"])
-                except Exception as e:
-                    print(f"Ошибка обработки: {e}", file=sys.stderr)
+            try:
+                if "message" in update:
+                    handle_message(update["message"])
+                elif "callback_query" in update:
+                    handle_callback(update["callback_query"])
+            except Exception as e:
+                print(f"Ошибка обработки: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

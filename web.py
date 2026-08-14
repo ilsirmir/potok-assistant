@@ -10,13 +10,14 @@
 from pathlib import Path
 from threading import Lock
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import agent
 import config
+import documents
 import tools
 
 STATIC = Path(__file__).parent / "static"
@@ -51,8 +52,8 @@ def reset():
     return {"ok": True}
 
 
-@app.post("/api/chat")
-def chat(message: Message):
+def run_turn(text):
+    """Один ход диалога. Общий код для текста и для загруженного файла."""
     actions = []
 
     def record(name, args, result):
@@ -69,7 +70,7 @@ def chat(message: Message):
     # Прототип держит одну общую историю на процесс. Блокировка не даёт
     # двум одновременным запросам перемешать переписку.
     with lock:
-        history.append({"role": "user", "content": message.text})
+        history.append({"role": "user", "content": text})
         try:
             result = agent.run(history, on_tool_call=record,
                                on_wait=lambda s: waits.append(s))
@@ -83,6 +84,28 @@ def chat(message: Message):
         "actions": actions,
         "waited": round(sum(waits)) or None,
     }
+
+
+@app.post("/api/chat")
+def chat(message: Message):
+    return run_turn(message.text)
+
+
+@app.post("/api/upload")
+async def upload(file: UploadFile = File(...), text: str = Form("")):
+    """Загрузка документа: извлекаем текст и отправляем агенту как сообщение."""
+    try:
+        content = documents.as_message(file.filename, await file.read())
+    except documents.UnsupportedFile as e:
+        return {"error": f"Не смог прочитать «{file.filename}»: {e}",
+                "actions": []}
+    except Exception as e:
+        return {"error": f"Ошибка при чтении файла: {e}", "actions": []}
+
+    prompt = f"{text.strip()}\n\n{content}" if text.strip() else content
+    result = run_turn(prompt)
+    result["filename"] = file.filename
+    return result
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
