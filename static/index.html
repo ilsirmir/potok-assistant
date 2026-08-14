@@ -58,6 +58,9 @@ textarea{flex:1;font:inherit;resize:none;background:var(--card);color:var(--ink)
 textarea:focus{outline:none;border-color:var(--signal)}
 form button{font:inherit;font-weight:500;background:var(--ink);color:var(--paper);
   border:none;border-radius:8px;padding:0 20px;cursor:pointer;align-self:stretch}
+#attach{background:none;color:var(--muted);border:1px solid var(--rule);padding:0 14px}
+#attach:hover{border-color:var(--signal);color:var(--signal)}
+#attach.armed{border-color:var(--signal);color:var(--signal);background:var(--signal-tint)}
 form button:disabled{opacity:.4;cursor:default}
 
 /* Журнал действий — свёрстан как учётная запись, а не как лента чата */
@@ -114,7 +117,9 @@ aside h2{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
       </div>
     </div>
     <form id="form">
-      <textarea id="input" rows="1" placeholder="Спросите или вставьте заметки со встречи…"></textarea>
+      <input type="file" id="file" accept=".pdf,.docx,.txt,.md,.csv" hidden>
+      <button type="button" id="attach" title="Прикрепить документ">Файл</button>
+      <textarea id="input" rows="1" placeholder="Спросите, вставьте заметки или прикрепите документ…"></textarea>
       <button type="submit" id="send">Отправить</button>
     </form>
   </section>
@@ -131,6 +136,8 @@ const log = document.getElementById('log');
 const input = document.getElementById('input');
 const send = document.getElementById('send');
 const empty = document.getElementById('empty');
+const fileInput = document.getElementById('file');
+const attach = document.getElementById('attach');
 
 const LABELS = {
   get_project_context: 'контекст проекта',
@@ -221,22 +228,41 @@ function logAction(action) {
   log.scrollTop = log.scrollHeight;
 }
 
+attach.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files[0];
+  attach.classList.toggle('armed', !!f);
+  attach.textContent = f ? f.name.slice(0, 18) : 'Файл';
+  if (f && !input.value.trim())
+    input.placeholder = 'Что сделать с документом? Можно оставить пустым';
+});
+
 async function submit() {
   const text = input.value.trim();
-  if (!text || send.disabled) return;
+  const file = fileInput.files[0];
+  if ((!text && !file) || send.disabled) return;
 
   empty.hidden = true;
   input.value = ''; input.style.height = 'auto';
   send.disabled = true;
-  turn('user', 'вы', text.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])));
+  const esc = t => t.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+  turn('user', 'вы', (file ? `<b>📎 ${esc(file.name)}</b><br>` : '') + esc(text));
   const pending = turn('bot', 'ассистент', '<span style="color:var(--muted)">думает…</span>');
 
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({text}),
-    });
+    let res;
+    if (file) {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('text', text);
+      res = await fetch('/api/upload', {method: 'POST', body: form});
+    } else {
+      res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text}),
+      });
+    }
     const data = await res.json();
     (data.actions || []).forEach(logAction);
 
@@ -254,6 +280,9 @@ async function submit() {
     pending.querySelector('.body').textContent = 'Сервер не отвечает. Проверьте, запущен ли uvicorn.';
   }
 
+  fileInput.value = '';
+  attach.classList.remove('armed');
+  attach.textContent = 'Файл';
   send.disabled = false;
   input.focus();
   thread.scrollTop = thread.scrollHeight;
