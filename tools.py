@@ -31,11 +31,27 @@ def get_project_context(client):
 
     pid = project["project_id"]
     open_tasks = sheets.get_tasks(pid, only_open=True)
+    today = _today()
+
+    # Просрочки помечаем прямо здесь: модель хуже сравнивает даты, чем код.
+    overdue = [
+        {"task_id": t["task_id"], "task": t["task"], "owner": t["owner"],
+         "due": t["due"], "days_late": (today - sheets.parse_date(t["due"])).days}
+        for t in open_tasks
+        if sheets.parse_date(t["due"]) and sheets.parse_date(t["due"]) < today
+    ]
 
     return {
         "project": _clean(project),
+        "progress": dict(
+            sheets.project_progress(pid),
+            planned_finish=project.get("planned_finish", ""),
+            deadline_note=sheets.deadline_note(project.get("planned_finish")),
+            working_days_left=sheets.working_days_left(project.get("planned_finish")),
+        ),
         "meetings": [_clean(m) for m in sheets.get_meetings(pid)[-4:]],
         "open_tasks": [_clean(t) for t in open_tasks],
+        "overdue_tasks": overdue,
         "closed_count": len(sheets.get_tasks(pid)) - len(open_tasks),
     }
 
@@ -72,6 +88,14 @@ def list_overdue_tasks(client=None):
 
 
 # --- Запись ----------------------------------------------------------------
+
+def find_similar_tasks():
+    """Похожие открытые задачи у разных заказчиков."""
+    groups = sheets.similar_task_groups()
+    if not groups:
+        return {"groups": [], "note": "Похожих задач между проектами не найдено"}
+    return {"groups": groups, "count": len(groups)}
+
 
 def add_tasks(client, tasks):
     """Добавляет задачи в реестр. Вызывать только после подтверждения."""
@@ -191,6 +215,19 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "find_similar_tasks",
+            "description": (
+                "Найти похожие открытые задачи у РАЗНЫХ заказчиков. "
+                "Использовать для вопросов вида «что повторяется между "
+                "проектами», «где можно сделать шаблон». Возвращает группы "
+                "задач, сформулированных близко по смыслу."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "add_tasks",
             "description": (
                 "Записать НОВЫЕ задачи в реестр проекта. Вызывать только "
@@ -287,6 +324,7 @@ TOOLS = [
 HANDLERS = {
     "get_project_context": get_project_context,
     "list_overdue_tasks": list_overdue_tasks,
+    "find_similar_tasks": find_similar_tasks,
     "add_tasks": add_tasks,
     "update_task": update_task,
     "create_deadline": create_deadline,

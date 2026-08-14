@@ -25,19 +25,21 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/{id}/edit"
 
 MENU = {"keyboard": [
     [{"text": "Что горит"}, {"text": "Проекты"}],
-    [{"text": "Подготовка к встрече"}],
+    [{"text": "Подготовка к встрече"}, {"text": "Похожие задачи"}],
 ], "resize_keyboard": True}
 
 COMMANDS = [
     {"command": "start", "description": "Что умеет помощник"},
     {"command": "tasks", "description": "Что просрочено и что горит"},
     {"command": "projects", "description": "Список проектов"},
+    {"command": "similar", "description": "Похожие задачи между проектами"},
     {"command": "reset", "description": "Начать диалог заново"},
 ]
 
 TOOL_LABELS = {
     "get_project_context": "поднял контекст проекта",
     "list_overdue_tasks": "проверил задачи",
+    "find_similar_tasks": "сравнил задачи между проектами",
     "add_tasks": "записал задачи в реестр",
     "update_task": "обновил задачу",
     "create_deadline": "поставил событие в календарь",
@@ -50,11 +52,18 @@ GREETING = (
     "- подготовить к встрече и напомнить прошлые договорённости\n"
     "- показать, что просрочено и что горит\n"
     "- разобрать заметки со встречи и записать задачи в реестр\n"
+    "- найти повторяющиеся задачи у разных заказчиков\n"
     "- прочитать документ: пришлите PDF, DOCX или TXT файлом\n\n"
+    "Удобнее всего начать с кнопки «Проекты»: выберите заказчика, "
+    "и дальше все заметки и файлы будут относиться к нему.\n\n"
     "Пользуйтесь кнопками внизу или пишите словами."
 )
 
 histories = {}
+
+# Выбранный проект держится за чатом: человек указывает заказчика один раз,
+# дальше все заметки и файлы относятся к нему, пока проект не сменят.
+active = {}
 
 
 # --- Telegram API ----------------------------------------------------------
@@ -110,15 +119,43 @@ def allowed(user_id):
 
 # --- Клавиатуры ------------------------------------------------------------
 
-def project_keyboard():
+def project_keyboard(action):
     """Инлайн-кнопки со списком проектов.
 
     Выбор кнопкой вместо набора названия заодно снимает вопрос склонений:
     в агента уходит точное имя клиента из реестра.
     """
-    rows = [[{"text": p["client"], "callback_data": f"prep:{p['project_id']}"}]
+    rows = [[{"text": p["client"], "callback_data": f"{action}:{p['project_id']}"}]
             for p in sheets.get_projects()]
     return {"inline_keyboard": rows} if rows else None
+
+
+def project_actions(project_id):
+    """Что можно сделать с выбранным проектом."""
+    return {"inline_keyboard": [
+        [{"text": "Подготовить к встрече", "callback_data": f"prep:{project_id}"}],
+        [{"text": "Задачи", "callback_data": f"tasks:{project_id}"},
+         {"text": "Риски", "callback_data": f"risks:{project_id}"}],
+        [{"text": "Внести заметки или файл", "callback_data": f"notes:{project_id}"}],
+        [{"text": "Другой проект", "callback_data": "list:all"}],
+    ]}
+
+
+def project_card(project):
+    progress = sheets.project_progress(project["project_id"])
+    started = sheets.format_date(project.get("started"))
+    done = ("задач нет" if progress["percent"] is None else
+            f"{progress['percent']}% ({progress['done']} из {progress['total']} задач)")
+
+    return (f"**{project['client']}** — {project['project']}\n"
+            f"Этап: {project['stage']} · выполнено: {done}\n"
+            f"Сроки: {started} — {sheets.deadline_note(project.get('planned_finish'))}\n"
+            f"Контакт: {project['client_contact']}")
+
+
+def find_project_by_id(project_id):
+    return next((p for p in sheets.get_projects()
+                 if p["project_id"] == project_id), None)
 
 
 def after_reply_keyboard(reply, actions):
@@ -202,14 +239,9 @@ def show_projects(chat_id):
         send(chat_id, "В реестре нет проектов.", as_html=False)
         return
 
-    lines = []
-    for p in projects:
-        open_tasks = sheets.get_tasks(p["project_id"], only_open=True)
-        lines.append(
-            f"**{p['client']}** — {p['project']}\n"
-            f"Этап: {p['stage']} · открытых задач: {len(open_tasks)}\n"
-            f"Контакт: {p['client_contact']}")
-    send(chat_id, to_html("\n\n".join(lines)))
+    text = "\n\n".join(project_card(p) for p in projects)
+    send(chat_id, to_html(text + "\n\nВыберите проект, чтобы работать с ним:"),
+         markup=project_keyboard("open"))
 
 
 # --- Обработка сообщений ---------------------------------------------------
@@ -250,7 +282,8 @@ def handle_message(message):
         send(chat_id, "Этот бот приватный.", as_html=False)
         return
 
-    if message.get("document"):
+    is_document = bool(message.get("document"))
+    if is_document:
         text = read_document(chat_id, message["document"],
                              (message.get("caption") or "").strip())
         if not text:
@@ -263,11 +296,13 @@ def handle_message(message):
 
     if text in ("/start", "/help"):
         histories.pop(chat_id, None)
+        active.pop(chat_id, None)
         send(chat_id, to_html(GREETING), markup=MENU)
         return
 
     if text == "/reset":
         histories.pop(chat_id, None)
+        active.pop(chat_id, None)
         send(chat_id, "Диалог очищен.", as_html=False, markup=MENU)
         return
 
@@ -275,18 +310,31 @@ def handle_message(message):
         show_projects(chat_id)
         return
 
+    if text in ("/similar", "Похожие задачи"):
+        ask(chat_id, "Найди похожие открытые задачи у разных заказчиков. "
+                     "По каждой группе скажи, что в них общего и что можно "
+                     "сделать один раз шаблоном, а что придётся "
+                     "персонализировать под конкретного клиента.")
+        return
+
     if text in ("/tasks", "Что горит"):
         ask(chat_id, "Что просрочено и что горит на этой неделе?")
         return
 
     if text == "Подготовка к встрече":
-        keyboard = project_keyboard()
+        keyboard = project_keyboard("prep")
         if keyboard:
             send(chat_id, "С каким заказчиком встреча?", as_html=False,
                  markup=keyboard)
         else:
             send(chat_id, "В реестре нет проектов.", as_html=False)
         return
+
+    # Свободный текст и файлы привязываются к выбранному проекту, чтобы
+    # не приходилось называть заказчика в каждом сообщении.
+    project = find_project_by_id(active.get(chat_id, ""))
+    if project:
+        text = f"Речь о проекте «{project['client']}».\n\n{text}"
 
     ask(chat_id, text)
 
@@ -309,18 +357,47 @@ def handle_callback(query):
     except RuntimeError:
         pass
 
-    if data.startswith("prep:"):
-        project = next((p for p in sheets.get_projects()
-                        if p["project_id"] == data.split(":", 1)[1]), None)
+    if data == "list:all":
+        keyboard = project_keyboard("open")
+        if keyboard:
+            send(chat_id, "Какой проект?", as_html=False, markup=keyboard)
+        return
+
+    if ":" in data and data.split(":", 1)[0] in ("open", "prep", "tasks",
+                                                 "risks", "notes"):
+        action, project_id = data.split(":", 1)
+        project = find_project_by_id(project_id)
         if not project:
             send(chat_id, "Проект не найден.", as_html=False)
             return
-        ask(chat_id, f"Подготовь меня к встрече с «{project['client']}»")
 
-    elif data == "confirm:yes":
+        active[chat_id] = project_id
+        client = project["client"]
+
+        if action == "open":
+            send(chat_id, to_html(project_card(project)),
+                 markup=project_actions(project_id))
+        elif action == "prep":
+            ask(chat_id, f"Подготовь меня к встрече с «{client}»")
+        elif action == "tasks":
+            ask(chat_id, f"Покажи открытые задачи по проекту «{client}»")
+        elif action == "risks":
+            ask(chat_id, f"Какие риски по проекту «{client}»? "
+                         f"Опирайся на просрочки, сдвиги сроков и нерешённые "
+                         f"вопросы из встреч.")
+        elif action == "notes":
+            send(chat_id, to_html(
+                f"Работаем по проекту **{client}**.\n\n"
+                "Пришлите заметки со встречи текстом или документом — "
+                "разберу и предложу задачи. Можно просто задать вопрос "
+                "по проекту.\n\n"
+                "Чтобы сменить проект, нажмите «Проекты»."))
+        return
+
+    if data == "confirm:yes":
         ask(chat_id, "Да, подтверждаю. Вноси изменения.")
 
-    elif data == "confirm:no":
+    if data == "confirm:no":
         send(chat_id, "Отменил, ничего не записываю.", as_html=False)
 
 

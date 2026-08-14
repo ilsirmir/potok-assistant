@@ -15,7 +15,7 @@ from googleapiclient.discovery import build
 import config
 
 PROJECTS_COLUMNS = ["project_id", "client", "project", "stage",
-                    "manager", "client_contact", "started"]
+                    "manager", "client_contact", "started", "planned_finish"]
 MEETINGS_COLUMNS = ["meeting_id", "date", "project_id", "participants",
                     "summary", "agreements"]
 TASKS_COLUMNS = ["task_id", "project_id", "task", "owner",
@@ -172,6 +172,89 @@ def find_project(hint):
                 if size >= 4 and hw[:size] == word[:size]:
                     return p
     return None
+
+
+def working_days_left(value, today=None):
+    """Рабочих дней до даты. Отрицательное — срок уже прошёл.
+
+    Считаются будни без учёта праздников: производственный календарь
+    пришлось бы вести отдельно и обновлять каждый год.
+    """
+    target = parse_date(value)
+    if not target:
+        return None
+
+    today = today or dt.date.today()
+    start, end = min(today, target), max(today, target)
+    days = sum(1 for i in range((end - start).days)
+               if (start + dt.timedelta(days=i)).weekday() < 5)
+    return days if target >= today else -days
+
+
+def project_progress(project_id):
+    """Доля закрытых задач по проекту.
+
+    Грубая метрика: задачи разного веса считаются одинаково. Но она честно
+    отвечает на вопрос «сколько из намеченного закрыто», а точная оценка
+    потребовала бы трудозатрат в каждой строке реестра.
+    """
+    tasks = get_tasks(project_id)
+    if not tasks:
+        return {"total": 0, "done": 0, "percent": None}
+    done = len([t for t in tasks if t["status"] == "Выполнена"])
+    return {"total": len(tasks), "done": done,
+            "percent": round(done * 100 / len(tasks))}
+
+
+def deadline_note(value):
+    """Строка про остаток времени до плановой даты завершения."""
+    days = working_days_left(value)
+    if days is None:
+        return "дата завершения не задана"
+    if days < 0:
+        return f"{format_date(value)} — срок прошёл {abs(days)} рабочих дней назад"
+    if days == 0:
+        return f"{format_date(value)} — это сегодня"
+    return f"{format_date(value)} — осталось {days} рабочих дней"
+
+
+def similar_task_groups(threshold=0.4):
+    """Похожие открытые задачи из РАЗНЫХ проектов.
+
+    Внедрение типовое: согласование прав доступа, выгрузка справочников,
+    расчёт стоимости повторяются у каждого заказчика. Увиденные рядом,
+    такие задачи делаются один раз шаблоном и потом персонализируются.
+    """
+    names = {p["project_id"]: p["client"] for p in get_projects()}
+    tasks = [t for t in get_tasks(only_open=True) if t["project_id"] in names]
+
+    groups, used = [], set()
+    for i, task in enumerate(tasks):
+        if task["task_id"] in used:
+            continue
+        words = set(_words(task["task"]))
+        if not words:
+            continue
+
+        group = [task]
+        for other in tasks[i + 1:]:
+            if other["task_id"] in used or other["project_id"] == task["project_id"]:
+                continue
+            other_words = set(_words(other["task"]))
+            if not other_words:
+                continue
+            if len(words & other_words) / len(words | other_words) >= threshold:
+                group.append(other)
+
+        if len(group) > 1:
+            for t in group:
+                used.add(t["task_id"])
+            groups.append([
+                {"task_id": t["task_id"], "client": names[t["project_id"]],
+                 "task": t["task"], "owner": t["owner"], "due": t["due"]}
+                for t in group
+            ])
+    return groups
 
 
 def similar_open_task(project_id, text):
