@@ -7,6 +7,9 @@ credentials.json
 __pycache__/
 *.pyc
 
+# Рабочая копия демо-данных (эталон — potok_demo_data.xlsx)
+demo_workspace.xlsx
+
 # Тестовые файлы и мусор ОС
 *.docx
 *.zip

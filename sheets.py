@@ -13,6 +13,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 import config
+import local_store
 
 PROJECTS_COLUMNS = ["project_id", "client", "project", "stage",
                     "manager", "client_contact", "started", "planned_finish"]
@@ -87,6 +88,11 @@ def _read(sheet_name, columns):
     cached = _cache.get(sheet_name)
     if cached and now - cached[0] < CACHE_TTL:
         return cached[1]
+
+    if config.DEMO_MODE:
+        rows = local_store.read(sheet_name, columns)
+        _cache[sheet_name] = (now, rows)
+        return rows
 
     last_column = chr(ord("A") + len(columns) - 1)
     values = _service().spreadsheets().values().get(
@@ -301,13 +307,16 @@ def append_tasks(rows):
         record = dict(row, task_id=task_id)
         values.append([record.get(col, "") for col in TASKS_COLUMNS])
 
-    _service().spreadsheets().values().append(
-        spreadsheetId=config.SHEET_ID,
-        range="tasks!A:H",
-        valueInputOption="USER_ENTERED",
-        insertDataOption="INSERT_ROWS",
-        body={"values": values},
-    ).execute()
+    if config.DEMO_MODE:
+        local_store.append("tasks", values)
+    else:
+        _service().spreadsheets().values().append(
+            spreadsheetId=config.SHEET_ID,
+            range="tasks!A:H",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": values},
+        ).execute()
 
     _invalidate("tasks")
     return ids
@@ -330,18 +339,22 @@ def update_task(task_id, **fields):
     if not task:
         return None
 
-    data = [
-        {"range": f"tasks!{TASK_CELL[name]}{task['_row']}", "values": [[value]]}
-        for name, value in fields.items()
-        if name in TASK_CELL and value is not None
-    ]
-    if not data:
+    changes = [(task["_row"], TASK_CELL[name], value)
+               for name, value in fields.items()
+               if name in TASK_CELL and value is not None]
+    if not changes:
         return task
 
-    _service().spreadsheets().values().batchUpdate(
-        spreadsheetId=config.SHEET_ID,
-        body={"valueInputOption": "USER_ENTERED", "data": data},
-    ).execute()
+    if config.DEMO_MODE:
+        local_store.update("tasks", changes)
+    else:
+        _service().spreadsheets().values().batchUpdate(
+            spreadsheetId=config.SHEET_ID,
+            body={"valueInputOption": "USER_ENTERED", "data": [
+                {"range": f"tasks!{column}{row}", "values": [[value]]}
+                for row, column, value in changes
+            ]},
+        ).execute()
 
     _invalidate("tasks")
     return find_task(task_id)

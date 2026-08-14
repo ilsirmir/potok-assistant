@@ -7,6 +7,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 import config
+import local_store
 
 
 @lru_cache(maxsize=1)
@@ -21,6 +22,9 @@ def create_event(title, date, description="", duration_minutes=30, time=None):
 
     date — строка YYYY-MM-DD, time — HH:MM или None.
     """
+    if config.DEMO_MODE:
+        return local_store.add_event(title, date, description, time)
+
     body = {"summary": title, "description": description}
 
     if time:

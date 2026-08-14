@@ -62,7 +62,7 @@ def status():
     # Ошибку чтения таблицы не глушим: пустой список выглядит как «проектов
     # нет», хотя на деле это сбой доступа, и искать его потом дороже.
     result = {"model": config.LLM_MODEL, "active": active["project_id"],
-              "projects": []}
+              "demo": config.DEMO_MODE, "projects": []}
     try:
         today = dt.date.today()
         projects = []
@@ -89,8 +89,14 @@ def status():
 def overview():
     """Сводка по всем проектам для общей ленты."""
     today = dt.date.today()
-    projects = sheets.get_projects()
-    all_tasks = sheets.get_tasks()
+    try:
+        projects = sheets.get_projects()
+        all_tasks = sheets.get_tasks()
+    except Exception as e:
+        # Без настроенных доступов интерфейс должен объяснить причину,
+        # а не показать пустую страницу с ошибкой сервера.
+        print(f"Не удалось прочитать реестр: {e}", file=sys.stderr)
+        return {"error": f"{type(e).__name__}: {e}"}
 
     open_tasks = [t for t in all_tasks if t["status"] != "Выполнена"]
     overdue = [t for t in open_tasks
@@ -139,8 +145,13 @@ def set_project(choice: Project):
     if not active["project_id"]:
         return {"active": None, "card": None}
 
-    project = next((p for p in sheets.get_projects()
-                    if p["project_id"] == active["project_id"]), None)
+    try:
+        project = next((p for p in sheets.get_projects()
+                        if p["project_id"] == active["project_id"]), None)
+    except Exception as e:
+        print(f"Не удалось прочитать проект: {e}", file=sys.stderr)
+        return {"active": None, "card": None, "error": f"{type(e).__name__}: {e}"}
+
     if not project:
         active["project_id"] = None
         return {"active": None, "card": None}

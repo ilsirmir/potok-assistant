@@ -43,10 +43,14 @@ def google_creds():
 
 
 def check_env():
-    missing = [name for name in ("LLM_API_KEY", "SHEET_ID", "CALENDAR_ID")
-               if not getattr(config, name)]
+    required = ["LLM_API_KEY"] if config.DEMO_MODE else [
+        "LLM_API_KEY", "SHEET_ID", "CALENDAR_ID"]
+    missing = [name for name in required if not getattr(config, name)]
     if missing:
         raise RuntimeError("в .env нет переменных: " + ", ".join(missing))
+    if config.DEMO_MODE:
+        return ("LLM_API_KEY на месте. Google не настроен — включён "
+                "демо-режим на локальном файле")
     return "переменные на месте"
 
 
@@ -92,8 +96,13 @@ def check_calendar():
 
 check("1. Файл .env", check_env)
 check("2. Модель", check_llm)
-check("3. Google Sheets", check_sheets)
-check("4. Google Calendar", check_calendar)
+if config.DEMO_MODE:
+    print("\n3. Реестр")
+    print(f"{OK} демо-режим: локальный файл, Google не требуется")
+    results.append(("3. Реестр", True))
+else:
+    check("3. Google Sheets", check_sheets)
+    check("4. Google Calendar", check_calendar)
 
 failed = [name for name, ok in results if not ok]
 print("\n" + "-" * 50)
@@ -103,3 +112,6 @@ if failed:
         print(f"  - {name}")
     sys.exit(1)
 print("Все доступы работают. Запускайте: uvicorn web:app --reload")
+if config.DEMO_MODE:
+    print("Реестр — локальный файл demo_workspace.xlsx. Чтобы подключить "
+          "Google Таблицу, заполните SHEET_ID и credentials.json.")

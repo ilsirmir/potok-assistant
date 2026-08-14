@@ -27,6 +27,16 @@ LLM_BASE_URL = os.getenv(
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.6-flash")
 LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY")
 
+# --- Хранилище --------------------------------------------------------------
+# Демо-режим: реестр читается и пишется в локальный файл вместо Google
+# Таблицы. Нужен, чтобы проект можно было запустить, имея только ключ
+# модели, — настройка сервисного аккаунта занимает полчаса и отпугивает.
+# Включается сам, если доступов к Google нет.
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEMO_SOURCE = os.path.join(BASE_DIR, "potok_demo_data.xlsx")
+DEMO_FILE = os.path.join(BASE_DIR, "demo_workspace.xlsx")
+
 # --- Google ----------------------------------------------------------------
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS", "credentials.json")
 SHEET_ID = os.getenv("SHEET_ID")
@@ -43,6 +53,22 @@ ALLOWED_USER_ID = os.getenv("ALLOWED_USER_ID")
 
 # Часовой пояс для событий календаря.
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
+
+
+def _resolve_demo():
+    """Демо, если явно попросили или если Google не настроен."""
+    flag = os.getenv("DEMO_MODE", "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    if flag in ("0", "false", "no", "off"):
+        return False
+    credentials = GOOGLE_CREDENTIALS
+    if not os.path.isabs(credentials):
+        credentials = os.path.join(BASE_DIR, credentials)
+    return not (os.path.exists(credentials) and SHEET_ID)
+
+
+DEMO_MODE = _resolve_demo()
 
 
 def require(*names):
