@@ -44,7 +44,6 @@ TOOL_LABELS = {
     "find_similar_tasks": "сравнил задачи между проектами",
     "add_tasks": "записал задачи в реестр",
     "update_task": "обновил задачу",
-    "create_deadline": "поставил событие в календарь",
     "grounding_check": "поймал ссылку на несуществующую задачу",
 }
 
@@ -177,8 +176,6 @@ def after_reply_keyboard(reply, actions):
     buttons = []
 
     for name, result in actions:
-        if name == "create_deadline" and isinstance(result, dict) and result.get("link"):
-            buttons.append([{"text": "Открыть событие", "url": result["link"]}])
         if name in ("add_tasks", "update_task") and config.SHEET_ID:
             link = SHEET_URL.format(id=config.SHEET_ID)
             if not any(b[0].get("url") == link for b in buttons):
@@ -231,9 +228,6 @@ def ask(chat_id, text):
             done.append(f"не удалось: {label} — {res['error']}")
         elif name == "add_tasks" and res.get("created"):
             done.append(f"{label}: {', '.join(res['created'])}")
-        elif name == "create_deadline":
-            done.append(f"{label}: {res.get('created')} — "
-                        f"{sheets.format_date(res.get('date'))}")
         elif name == "update_task":
             done.append(f"{label}: {res.get('updated')} — срок "
                         f"{sheets.format_date(res.get('due'))}, "
@@ -414,7 +408,7 @@ def handle_callback(query):
 # --- Запуск ----------------------------------------------------------------
 
 def main():
-    config.require("TELEGRAM_TOKEN", "LLM_API_KEY", "SHEET_ID", "CALENDAR_ID")
+    config.require("TELEGRAM_TOKEN", "LLM_API_KEY")
 
     me = call("getMe")
     call("setMyCommands", commands=COMMANDS)
@@ -427,7 +421,7 @@ def main():
             "Разбирает заметки со встреч, ведёт реестр задач и готовит "
             "к следующим встречам."))
         call("setMyShortDescription", short_description=(
-            "Заметки со встречи → задачи в реестре и дедлайны в календаре"))
+            "Заметки со встречи → задачи в реестре проекта"))
     except RuntimeError as e:
         print(f"Не удалось обновить описание бота: {e}", file=sys.stderr)
     print(f"Бот @{me['username']} запущен. Остановить: Ctrl+C")

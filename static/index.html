@@ -221,7 +221,7 @@ aside h2{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
       <div class="thread" id="base"><div id="empty">
         <p>Помощник знает проекты внедрения, историю встреч и реестр задач.
            Он поднимает контекст, разбирает заметки и документы, а после
-           подтверждения записывает задачи в реестр и календарь.</p>
+           подтверждения записывает задачи в реестр проекта.</p>
         <p>Выберите проект в шапке — появится карточка с состоянием дел и
            действиями по нему. Всё, что вы напишете или загрузите дальше,
            будет отнесено к этому проекту.</p>
@@ -262,7 +262,7 @@ function pane(key) {
   const log = document.createElement('div');
   log.className = 'log';
   log.innerHTML = '<p class="hint">Здесь появится каждое обращение к таблице '
-    + 'и календарю: что вызвано, с какими данными и что изменилось.</p>';
+    + 'проекта: что вызвано, с какими данными и что изменилось.</p>';
   logs.appendChild(log);
 
   panes[key] = {thread, log, started: false};
@@ -295,7 +295,6 @@ const LABELS = {
   list_overdue_tasks:  'просроченные задачи',
   add_tasks:           'запись задач',
   update_task:         'изменение задачи',
-  create_deadline:     'событие в календаре',
   grounding_check:     'проверка реестра',
 };
 
@@ -419,7 +418,7 @@ function showSetupHint(error) {
     <p style="font-size:13px;line-height:1.6">
       Проверьте, что рядом с <code>web.py</code> лежат <code>.env</code> и
       <code>credentials.json</code>, а сервисному аккаунту выданы права на
-      таблицу и календарь. Диагностика по шагам:
+      таблицу. Диагностика по шагам:
       <code>python check_setup.py</code>
     </p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">${esc(error)}</p>`;
@@ -609,11 +608,6 @@ function describe(action) {
   }
   if (action.name === 'update_task')
     return `${esc(r.updated)}: срок ${esc(d(r.due))}, статус ${esc(r.status)}`;
-  if (action.name === 'create_deadline')
-    return r.link
-      ? `Создано «${esc(r.created)}» на ${esc(d(r.date))} — `
-        + `<a href="${encodeURI(r.link)}" target="_blank" rel="noopener">открыть</a>`
-      : `Создано «${esc(r.created)}» на ${esc(d(r.date))}`;
   if (action.name === 'get_project_context')
     return r.project ? `Проект ${esc(r.project.project_id)}, встреч: ${(r.meetings || []).length}, открытых задач: ${(r.open_tasks || []).length}` : '';
   if (action.name === 'grounding_check')

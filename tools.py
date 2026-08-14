@@ -1,13 +1,12 @@
 """Инструменты агента: описания для модели и их реализация.
 
-Два инструмента на чтение и три на запись. Записывающие проверяют входные
+Три инструмента на чтение и два на запись. Записывающие проверяют входные
 данные и возвращают человекочитаемый результат, чтобы модель могла честно
 отчитаться, что именно сделано.
 """
 
 import datetime as dt
 
-import calendar_api
 import sheets
 
 
@@ -186,16 +185,6 @@ def update_task(task_id, due=None, status=None):
             "due": task["due"], "status": task["status"]}
 
 
-def create_deadline(title, date, description="", time=None):
-    """Ставит событие в календарь. Вызывать только после подтверждения."""
-    if not sheets.is_valid_date(date):
-        return {"error": "Дата должна быть в формате ГГГГ-ММ-ДД"}
-
-    event = calendar_api.create_event(
-        title=title, date=date, description=description, time=time)
-    return {"created": title, "date": date, "link": event["link"]}
-
-
 # --- Описания для модели ---------------------------------------------------
 
 TOOLS = [
@@ -327,29 +316,6 @@ TOOLS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_deadline",
-            "description": (
-                "Поставить событие в рабочий календарь: дедлайн или встречу. "
-                "Вызывать только после подтверждения пользователем."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string", "description": "Название события"},
-                    "date": {"type": "string", "description": "Дата ГГГГ-ММ-ДД"},
-                    "time": {
-                        "type": "string",
-                        "description": "Необязательно. Время ЧЧ:ММ. Без него — событие на весь день",
-                    },
-                    "description": {"type": "string", "description": "Необязательно. Детали"},
-                },
-                "required": ["title", "date"],
-            },
-        },
-    },
 ]
 
 HANDLERS = {
@@ -358,7 +324,6 @@ HANDLERS = {
     "find_similar_tasks": find_similar_tasks,
     "add_tasks": add_tasks,
     "update_task": update_task,
-    "create_deadline": create_deadline,
 }
 
-WRITE_TOOLS = {"add_tasks", "update_task", "create_deadline"}
+WRITE_TOOLS = {"add_tasks", "update_task"}

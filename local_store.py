@@ -68,24 +68,6 @@ def update(sheet_name, changes):
         wb.save(path)
 
 
-def add_event(title, date, description, time):
-    """Событие календаря пишется в отдельный лист.
-
-    Заменять Google Calendar полноценно незачем, но действие должно быть
-    видимым: человек открывает файл и находит там созданную запись.
-    """
-    with _lock:
-        path = _workbook_path()
-        wb = load_workbook(path)
-        if "calendar" not in wb.sheetnames:
-            ws = wb.create_sheet("calendar")
-            ws.append(["date", "time", "title", "description"])
-        ws = wb["calendar"]
-        ws.append([date, time or "весь день", title, description])
-        wb.save(path)
-        return {"id": f"demo-{ws.max_row}", "link": ""}
-
-
 def reset():
     """Возвращает демо-данные в исходное состояние."""
     with _lock:

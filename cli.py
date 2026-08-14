@@ -51,7 +51,7 @@ def read_message():
 
 
 def main():
-    config.require("LLM_API_KEY", "SHEET_ID", "CALENDAR_ID")
+    config.require("LLM_API_KEY")
 
     print(f"{BOLD}Ассистент внедренца{RESET}  "
           f"{DIM}модель: {config.LLM_MODEL} · выход: Ctrl+C{RESET}")

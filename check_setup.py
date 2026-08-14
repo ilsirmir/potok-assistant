@@ -2,8 +2,7 @@
 
     python check_setup.py
 
-Ничего не меняет необратимо: в календаре создаётся тестовое событие
-и тут же удаляется, в таблицу запись не производится.
+Только читает: ничего в реестре не меняет.
 """
 
 import datetime as dt
@@ -44,7 +43,7 @@ def google_creds():
 
 def check_env():
     required = ["LLM_API_KEY"] if config.DEMO_MODE else [
-        "LLM_API_KEY", "SHEET_ID", "CALENDAR_ID"]
+        "LLM_API_KEY", "SHEET_ID"]
     missing = [name for name in required if not getattr(config, name)]
     if missing:
         raise RuntimeError("в .env нет переменных: " + ", ".join(missing))
@@ -78,22 +77,6 @@ def check_sheets():
     return f"таблица '{meta['properties']['title']}', задач в реестре: {len(rows)}"
 
 
-def check_calendar():
-    service = build("calendar", "v3", credentials=google_creds(),
-                    cache_discovery=False)
-    info = service.calendars().get(calendarId=config.CALENDAR_ID).execute()
-
-    start = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=1)
-    event = service.events().insert(calendarId=config.CALENDAR_ID, body={
-        "summary": "Тестовое событие (будет удалено)",
-        "start": {"dateTime": start.isoformat()},
-        "end": {"dateTime": (start + dt.timedelta(hours=1)).isoformat()},
-    }).execute()
-    service.events().delete(calendarId=config.CALENDAR_ID,
-                            eventId=event["id"]).execute()
-    return f"календарь '{info['summary']}', запись и удаление работают"
-
-
 check("1. Файл .env", check_env)
 check("2. Модель", check_llm)
 if config.DEMO_MODE:
@@ -102,7 +85,6 @@ if config.DEMO_MODE:
     results.append(("3. Реестр", True))
 else:
     check("3. Google Sheets", check_sheets)
-    check("4. Google Calendar", check_calendar)
 
 failed = [name for name, ok in results if not ok]
 print("\n" + "-" * 50)

@@ -40,19 +40,12 @@ DEMO_FILE = os.path.join(BASE_DIR, "demo_workspace.xlsx")
 # --- Google ----------------------------------------------------------------
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS", "credentials.json")
 SHEET_ID = os.getenv("SHEET_ID")
-CALENDAR_ID = os.getenv("CALENDAR_ID")
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/calendar",
-]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # --- Прочее ----------------------------------------------------------------
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 ALLOWED_USER_ID = os.getenv("ALLOWED_USER_ID")
-
-# Часовой пояс для событий календаря.
-TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
 
 
 def _resolve_demo():
