@@ -1,0 +1,7 @@
+openai>=1.40
+python-dotenv>=1.0
+google-api-python-client>=2.140
+google-auth>=2.33
+requests>=2.32
+fastapi>=0.115
+uvicorn[standard]>=0.30
