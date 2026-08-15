@@ -76,30 +76,8 @@ def avoids(*fragments):
     return check
 
 
-def argument(name, key, pattern):
-    """Аргумент вызова совпадает с образцом."""
-    def check(reply, calls):
-        for call in calls:
-            if call["name"] != name:
-                continue
-            value = str(call["args"].get(key, ""))
-            if re.search(pattern, value, re.I):
-                return None
-        return f"у {name} нет аргумента {key} по образцу {pattern}"
-    return check
 
 
-def task_due(pattern):
-    """Среди записанных задач есть срок по образцу."""
-    def check(reply, calls):
-        for call in calls:
-            if call["name"] != "add_tasks":
-                continue
-            for task in call["args"].get("tasks", []):
-                if re.search(pattern, str(task.get("due", ""))):
-                    return None
-        return f"нет задачи со сроком {pattern}"
-    return check
 
 
 def called_any(*names):
