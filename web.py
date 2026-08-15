@@ -20,6 +20,7 @@ from pydantic import BaseModel
 import agent
 import config
 import documents
+import errors
 import sheets
 import tools
 
@@ -80,8 +81,8 @@ def status():
             })
         result["projects"] = projects
     except Exception as e:
-        result["error"] = f"{type(e).__name__}: {e}"
-        print(f"Не удалось прочитать проекты: {e}", file=sys.stderr)
+        result["error"] = errors.describe(e)
+        print(errors.details(e), file=sys.stderr)
     return result
 
 
@@ -95,8 +96,8 @@ def overview():
     except Exception as e:
         # Без настроенных доступов интерфейс должен объяснить причину,
         # а не показать пустую страницу с ошибкой сервера.
-        print(f"Не удалось прочитать реестр: {e}", file=sys.stderr)
-        return {"error": f"{type(e).__name__}: {e}"}
+        print(errors.details(e), file=sys.stderr)
+        return {"error": errors.describe(e)}
 
     open_tasks = [t for t in all_tasks if t["status"] != "Выполнена"]
     overdue = [t for t in open_tasks
@@ -149,8 +150,8 @@ def set_project(choice: Project):
         project = next((p for p in sheets.get_projects()
                         if p["project_id"] == active["project_id"]), None)
     except Exception as e:
-        print(f"Не удалось прочитать проект: {e}", file=sys.stderr)
-        return {"active": None, "card": None, "error": f"{type(e).__name__}: {e}"}
+        print(errors.details(e), file=sys.stderr)
+        return {"active": None, "card": None, "error": errors.describe(e)}
 
     if not project:
         active["project_id"] = None
@@ -243,7 +244,8 @@ def run_turn(text):
                                on_wait=lambda s: waits.append(s))
         except Exception as e:
             history.pop()
-            return {"error": f"{type(e).__name__}: {e}", "actions": actions}
+            print(errors.details(e), file=sys.stderr)
+            return {"error": errors.describe(e), "actions": actions}
         history[:] = result
         reply = agent.last_reply(history)
 
@@ -265,10 +267,11 @@ async def upload(file: UploadFile = File(...), text: str = Form("")):
     try:
         content = documents.as_message(file.filename, await file.read())
     except documents.UnsupportedFile as e:
-        return {"error": f"Не смог прочитать «{file.filename}»: {e}",
+        return {"error": f"Не смог прочитать «{file.filename}». {e}",
                 "actions": []}
     except Exception as e:
-        return {"error": f"Ошибка при чтении файла: {e}", "actions": []}
+        print(errors.details(e), file=sys.stderr)
+        return {"error": errors.describe(e), "actions": []}
 
     prompt = f"{text.strip()}\n\n{content}" if text.strip() else content
     result = run_turn(prompt)

@@ -11,6 +11,7 @@ import sys
 
 import agent
 import config
+import errors
 
 DIM, BOLD, RESET = "\033[2m", "\033[1m", "\033[0m"
 
@@ -72,7 +73,7 @@ def main():
             history = agent.run(history, on_tool_call=show_tool_call,
                                 on_wait=show_wait)
         except Exception as e:
-            print(f"\n  Сбой: {type(e).__name__}: {e}\n", file=sys.stderr)
+            print(f"\n  {errors.describe(e)}\n", file=sys.stderr)
             history.pop()
             continue
 

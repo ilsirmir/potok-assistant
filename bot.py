@@ -16,6 +16,7 @@ import requests
 import agent
 import config
 import documents
+import errors
 import sheets
 import tools
 
@@ -210,7 +211,8 @@ def ask(chat_id, text):
         )
     except Exception as e:
         history.pop()
-        send(chat_id, f"Сбой: {type(e).__name__}: {e}", as_html=False)
+        print(errors.details(e), file=sys.stderr)
+        send(chat_id, errors.describe(e), as_html=False)
         return
 
     histories[(chat_id, active.get(chat_id, ""))] = result
@@ -273,10 +275,11 @@ def read_document(chat_id, document, caption):
     try:
         text = documents.as_message(name, download(document["file_id"]))
     except documents.UnsupportedFile as e:
-        send(chat_id, f"Не смог прочитать «{name}»: {e}", as_html=False)
+        send(chat_id, f"Не смог прочитать «{name}». {e}", as_html=False)
         return None
     except Exception as e:
-        send(chat_id, f"Ошибка при чтении файла: {e}", as_html=False)
+        print(errors.details(e), file=sys.stderr)
+        send(chat_id, errors.describe(e), as_html=False)
         return None
 
     return f"{caption}\n\n{text}" if caption else text
